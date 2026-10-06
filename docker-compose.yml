@@ -1,0 +1,104 @@
+services:
+  # One-shot: installs the plugin's Composer dependencies into ./vendor.
+  # WordPress waits for it, so the plugin never loads without its autoloader.
+  composer:
+    image: composer:2
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: ["install", "--no-interaction", "--no-progress"]
+    restart: "no"
+
+  wordpress:
+    image: wordpress:6.6-php8.2-apache
+    ports:
+      - "8081:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DEBUG: 1
+      # DISABLE_WP_CRON: the pseudo-cron is unreliable in local Docker; the
+      # wp-cron sidecar below drives wp-cron.php instead (same as production
+      # would with a system crontab). WP_AUTO_UPDATE_CORE=false keeps the
+      # core pinned to the image version once real cron actually runs.
+      WORDPRESS_CONFIG_EXTRA: "define('DISABLE_WP_CRON', true); define('WP_AUTO_UPDATE_CORE', false);"
+    volumes:
+      - wordpress_data:/var/www/html
+      - ./:/var/www/html/wp-content/plugins/geo-map-assistant
+    depends_on:
+      db:
+        condition: service_started
+      composer:
+        condition: service_completed_successfully
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+
+  wp-cron:
+    image: curlimages/curl:latest
+    depends_on:
+      - wordpress
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -s -o /dev/null http://wordpress/wp-cron.php
+          sleep 60
+        done
+
+  wp-cli:
+    image: wordpress:cli-php8.2
+    depends_on:
+      - db
+      - wordpress
+    volumes:
+      - wordpress_data:/var/www/html
+      - ./:/var/www/html/wp-content/plugins/geo-map-assistant
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    user: "33:33"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        # The wordpress container copies the core files into the shared volume
+        # on its first start; wait for them, not just for the container.
+        until [ -f /var/www/html/wp-includes/version.php ]; do sleep 2; done
+
+        # Wait via raw PHP mysqli: `wp` itself bootstraps WordPress on every
+        # call, and the bundled MariaDB client can't talk to MySQL 8 at all.
+        for i in $$(seq 1 60); do
+          php -r 'mysqli_report(MYSQLI_REPORT_OFF); $$c = @mysqli_connect(getenv("WORDPRESS_DB_HOST"), getenv("WORDPRESS_DB_USER"), getenv("WORDPRESS_DB_PASSWORD")); exit($$c ? 0 : 1);' 2>/dev/null && break
+          echo "Waiting for the database to be ready... ($$i/60)"
+          sleep 2
+        done
+
+        wp core install \
+          --path=/var/www/html \
+          --url=http://localhost:8081 \
+          --title="Geo Map Assistant Demo" \
+          --admin_user=admin \
+          --admin_password=admin \
+          --admin_email=admin@example.com \
+          --skip-email \
+          --allow-root || true
+
+        wp plugin activate geo-map-assistant --path=/var/www/html --allow-root
+        # Idempotent: re-running it on an already-seeded site creates nothing.
+        wp gma seed --path=/var/www/html --allow-root
+
+volumes:
+  wordpress_data:
+  db_data:

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap-integration.php"
+         colors="true">
+    <!--
+        Integration tests: real WordPress bootstrap (wp-phpunit) + a real
+        test database, wrapped in a transaction that's rolled back after
+        each test (WP_UnitTestCase's own mechanism). Needed for anything
+        that touches $wpdb directly, like PostStatusRepository — no ORM
+        layer here to mock against, so this is the honest way to test it.
+        Requires WP_TESTS_DB_* env vars (or the defaults in
+        tests/bootstrap-integration.php) pointing at a reachable MySQL.
+    -->
+    <testsuites>
+        <testsuite name="integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

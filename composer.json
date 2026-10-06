@@ -1,0 +1,36 @@
+{
+    "name": "moocot/geo-map-assistant",
+    "description": "Demo WordPress plugin — background geocoding of post addresses (Nominatim) and a Leaflet map of the results.",
+    "type": "wordpress-plugin",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.5"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "wp-phpunit/wp-phpunit": "6.6.*",
+        "yoast/phpunit-polyfills": "^2.0",
+        "doctrine/instantiator": "2.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "GMA\\": "includes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "GMA\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.25"
+        }
+    },
+    "scripts": {
+        "test:unit": "phpunit -c phpunit.unit.xml",
+        "test:integration": "phpunit -c phpunit.integration.xml",
+        "test": ["@test:unit", "@test:integration"]
+    }
+}
